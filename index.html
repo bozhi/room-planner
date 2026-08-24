@@ -1,0 +1,569 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Room Planner</title>
+<style>
+  :root{
+    --paper:#E9EBE4;
+    --paper-2:#F3F4EF;
+    --ink:#1E2724;
+    --ink-soft:#5C6660;
+    --rule:#C2C8BF;
+    --wall:#2A332F;
+    --sel:#2F4FCF;
+    --glass:#6FA8B5;
+    --olive:#8A9270;
+    --clay:#B07D5E;
+    --slate:#7C8894;
+    --plum:#8A7290;
+    --sand:#C2B48C;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0;
+    background:var(--paper);
+    color:var(--ink);
+    font:400 14px/1.45 "Inter","Helvetica Neue",Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  .num{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;font-variant-numeric:tabular-nums}
+
+  .app{display:grid;grid-template-columns:1fr 316px;height:100vh}
+  @media (max-width:900px){
+    .app{grid-template-columns:1fr;grid-template-rows:1fr auto;height:auto;min-height:100vh}
+    .panel{border-left:none;border-top:1px solid var(--rule);max-height:none}
+  }
+
+  /* ---------- stage ---------- */
+  .stage{position:relative;display:flex;flex-direction:column;min-width:0}
+  .topbar{
+    display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;
+    padding:16px 20px 12px;border-bottom:1px solid var(--rule);
+  }
+  .topbar h1{
+    margin:0;font:400 15px/1 Georgia,"Iowan Old Style",serif;
+    letter-spacing:.16em;text-transform:uppercase;
+  }
+  .topbar .meta{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-soft)}
+  .topbar .spacer{flex:1}
+  .canvaswrap{flex:1;min-height:420px;padding:18px;display:flex}
+  svg#plan{width:100%;height:100%;touch-action:none;user-select:none;display:block}
+  .hint{padding:0 20px 14px;font-size:12px;color:var(--ink-soft)}
+
+  /* ---------- panel ---------- */
+  .panel{
+    border-left:1px solid var(--rule);background:var(--paper-2);
+    overflow-y:auto;padding:18px 18px 40px;
+  }
+  .sec{border-top:1px solid var(--rule);padding:16px 0 4px;margin-top:4px}
+  .sec:first-child{border-top:none;padding-top:0}
+  .sec > h2{
+    margin:0 0 12px;font:500 10px/1 inherit;letter-spacing:.18em;
+    text-transform:uppercase;color:var(--ink-soft);
+  }
+  .row{display:flex;gap:8px;align-items:center;margin-bottom:8px}
+  .row > label{flex:1;font-size:12.5px;color:var(--ink-soft)}
+  input[type=number],select{
+    width:78px;padding:5px 7px;border:1px solid var(--rule);border-radius:3px;
+    background:#fff;color:var(--ink);font:inherit;font-family:ui-monospace,Menlo,monospace;font-size:12.5px;
+  }
+  select{width:96px;font-family:inherit}
+  input[type=range]{flex:1;accent-color:var(--sel)}
+  input:focus-visible,select:focus-visible,button:focus-visible{outline:2px solid var(--sel);outline-offset:1px}
+
+  button{
+    font:inherit;font-size:12.5px;padding:6px 10px;border:1px solid var(--rule);
+    background:#fff;color:var(--ink);border-radius:3px;cursor:pointer;
+  }
+  button:hover{background:var(--paper)}
+  button.primary{background:var(--ink);color:var(--paper-2);border-color:var(--ink)}
+  button.primary:hover{background:#000}
+  button.danger{color:#9B3226;border-color:#D9BDB8}
+  button.danger:hover{background:#F6EAE7}
+  .btnrow{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px}
+
+  .palette{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+  .palette button{text-align:left;display:flex;flex-direction:column;gap:2px;padding:7px 9px}
+  .palette .sz{font-family:ui-monospace,Menlo,monospace;font-size:10.5px;color:var(--ink-soft)}
+
+  .empty{font-size:12.5px;color:var(--ink-soft);line-height:1.5}
+  .gaps{display:grid;grid-template-columns:1fr 1fr;gap:6px 10px;font-size:12px;margin-top:6px}
+  .gaps div{display:flex;justify-content:space-between;border-bottom:1px dotted var(--rule);padding-bottom:2px}
+  .gaps span{color:var(--ink-soft)}
+  .swatches{display:flex;gap:6px;flex-wrap:wrap;margin-top:2px}
+  .sw{width:22px;height:22px;border-radius:3px;border:1px solid rgba(0,0,0,.18);cursor:pointer;padding:0}
+  .sw[aria-pressed=true]{box-shadow:0 0 0 2px var(--paper-2),0 0 0 3.5px var(--ink)}
+  .savedmsg{font-size:11.5px;color:var(--ink-soft);min-height:15px;letter-spacing:.02em}
+  .list{display:flex;flex-direction:column;gap:3px}
+  .list button{display:flex;justify-content:space-between;gap:8px;border:none;background:none;padding:5px 6px;border-radius:3px;width:100%}
+  .list button:hover{background:#fff}
+  .list button[aria-pressed=true]{background:var(--ink);color:var(--paper-2)}
+  .list .d{font-family:ui-monospace,Menlo,monospace;font-size:11px;opacity:.7}
+
+  @media print{
+    .panel,.topbar,.hint{display:none}
+    .app{display:block}
+    body{background:#fff}
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <main class="stage">
+    <div class="topbar">
+      <h1>Room Planner</h1>
+      <div class="meta num" id="roomMeta">—</div>
+      <div class="spacer"></div>
+      <div class="meta">Drag to move · R rotates · arrows nudge</div>
+    </div>
+    <div class="canvaswrap"><svg id="plan" xmlns="http://www.w3.org/2000/svg"></svg></div>
+    <p class="hint" id="hint">Everything is drawn to scale in inches. Grid squares are 1 foot.</p>
+  </main>
+
+  <aside class="panel">
+    <section class="sec">
+      <h2>Selected piece</h2>
+      <div id="selBody"><p class="empty">Nothing selected. Tap a piece of furniture on the plan to move or resize it.</p></div>
+    </section>
+
+    <section class="sec">
+      <h2>Add furniture</h2>
+      <div class="palette" id="palette"></div>
+      <div class="btnrow" style="margin-top:8px">
+        <button id="addCustom">Add custom size</button>
+      </div>
+    </section>
+
+    <section class="sec">
+      <h2>Pieces in the room</h2>
+      <div class="list" id="itemList"></div>
+    </section>
+
+    <section class="sec">
+      <h2>Room shell</h2>
+      <div class="row"><label for="rw">Room width</label><input class="num" type="number" id="rw" min="24" max="600" step="1"></div>
+      <div class="row"><label for="rh">Room depth</label><input class="num" type="number" id="rh" min="24" max="600" step="1"></div>
+      <div class="row"><label for="dWall">Door on wall</label><select id="dWall"><option value="N">Top</option><option value="E">Right</option><option value="S">Bottom</option><option value="W">Left</option></select></div>
+      <div class="row"><label for="dOff">Door offset</label><input class="num" type="number" id="dOff" min="0" step="1"></div>
+      <div class="row"><label for="dW">Door opening</label><input class="num" type="number" id="dW" min="12" step="1"></div>
+      <div class="btnrow"><button id="dFlip">Flip door hinge</button></div>
+      <div class="row"><label for="wWall">Window on wall</label><select id="wWall"><option value="N">Top</option><option value="E">Right</option><option value="S">Bottom</option><option value="W">Left</option></select></div>
+      <div class="row"><label for="wOff">Window offset</label><input class="num" type="number" id="wOff" min="0" step="1"></div>
+      <div class="row"><label for="wW">Window width</label><input class="num" type="number" id="wW" min="6" step="1"></div>
+    </section>
+
+    <section class="sec">
+      <h2>Layout</h2>
+      <div class="btnrow">
+        <button class="primary" id="save">Save layout</button>
+        <button id="load">Load saved</button>
+        <button id="print">Print</button>
+        <button class="danger" id="reset">Start over</button>
+      </div>
+      <div class="savedmsg" id="savedmsg"></div>
+    </section>
+  </aside>
+</div>
+
+<script>
+(function(){
+"use strict";
+
+/* ============ model ============ */
+const PALETTE = ["--olive","--clay","--slate","--plum","--sand"];
+const cssv = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+
+const CATALOG = [
+  {name:"Desk",          w:61, h:34, type:"rect", color:"--clay"},
+  {name:"Sofa + chaise", w:86, h:66, type:"sofa", depth:35, chaise:35, flip:false, color:"--olive"},
+  {name:"Coffee table",  w:48, h:24, type:"rect", color:"--sand"},
+  {name:"Armchair",      w:32, h:34, type:"rect", color:"--olive"},
+  {name:"Side table",    w:20, h:20, type:"rect", color:"--sand"},
+  {name:"Bookshelf",     w:36, h:12, type:"rect", color:"--slate"},
+  {name:"Dresser",       w:60, h:19, type:"rect", color:"--slate"},
+  {name:"TV stand",      w:58, h:16, type:"rect", color:"--slate"},
+  {name:"Office chair",  w:26, h:26, type:"rect", color:"--plum"},
+  {name:"Bed (queen)",   w:60, h:80, type:"rect", color:"--plum"},
+  {name:"Rug 5×8",       w:96, h:60, type:"rug",  color:"--sand"},
+  {name:"Rug 8×10",      w:120,h:96, type:"rug",  color:"--sand"}
+];
+
+function defaults(){
+  return {
+    room:{w:131,h:145},
+    door:{wall:"N",off:96,width:35,hinge:1},
+    win:{wall:"W",off:67,width:51},
+    items:[
+      {id:1,name:"Sofa + chaise",type:"sofa",x:23,y:75,w:86,h:66,rot:0,depth:35,chaise:35,flip:false,color:"--olive"},
+      {id:2,name:"Desk",type:"rect",x:4,y:4,w:61,h:34,rot:0,color:"--clay"}
+    ],
+    seq:3
+  };
+}
+let S = defaults();
+let sel = null, drag = null;
+
+/* ============ geometry helpers ============ */
+const RAD = d => d*Math.PI/180;
+function corners(it){
+  const cx=it.x+it.w/2, cy=it.y+it.h/2, a=RAD(it.rot||0), co=Math.cos(a), si=Math.sin(a);
+  return [[it.x,it.y],[it.x+it.w,it.y],[it.x+it.w,it.y+it.h],[it.x,it.y+it.h]]
+    .map(([px,py])=>{const dx=px-cx,dy=py-cy;return [cx+dx*co-dy*si, cy+dx*si+dy*co];});
+}
+function aabb(it){
+  const c=corners(it), xs=c.map(p=>p[0]), ys=c.map(p=>p[1]);
+  return {x0:Math.min(...xs),x1:Math.max(...xs),y0:Math.min(...ys),y1:Math.max(...ys)};
+}
+const r1 = n => Math.round(n*10)/10;
+
+/* ============ svg build ============ */
+const NS="http://www.w3.org/2000/svg";
+const svg=document.getElementById("plan");
+const el=(t,a={})=>{const n=document.createElementNS(NS,t);for(const k in a)n.setAttribute(k,a[k]);return n;};
+const PAD=34, WALL=4.5;
+
+function inwardNormal(wall){
+  return wall==="N"?[0,1]:wall==="S"?[0,-1]:wall==="W"?[1,0]:[-1,0];
+}
+function openingSeg(o){
+  const {w,h}=S.room, off=o.off, wd=o.width;
+  if(o.wall==="N") return [[off,0],[off+wd,0]];
+  if(o.wall==="S") return [[off,h],[off+wd,h]];
+  if(o.wall==="W") return [[0,off],[0,off+wd]];
+  return [[w,off],[w,off+wd]];
+}
+
+function render(){
+  const {w,h}=S.room;
+  svg.setAttribute("viewBox",`${-PAD} ${-PAD} ${w+PAD*2} ${h+PAD*2}`);
+  svg.setAttribute("preserveAspectRatio","xMidYMid meet");
+  while(svg.firstChild) svg.removeChild(svg.firstChild);
+
+  // floor
+  svg.appendChild(el("rect",{x:0,y:0,width:w,height:h,fill:cssv("--paper-2")}));
+
+  // 1-foot grid
+  const g=el("g",{stroke:cssv("--rule"),"stroke-width":.6,opacity:.85});
+  for(let x=12;x<w;x+=12) g.appendChild(el("line",{x1:x,y1:0,x2:x,y2:h}));
+  for(let y=12;y<h;y+=12) g.appendChild(el("line",{x1:0,y1:y,x2:w,y2:y}));
+  svg.appendChild(g);
+
+  // items
+  S.items.forEach(it=>svg.appendChild(itemNode(it)));
+
+  // walls (drawn over furniture so pieces read as inside the room)
+  svg.appendChild(el("rect",{x:0,y:0,width:w,height:h,fill:"none",
+    stroke:cssv("--wall"),"stroke-width":WALL}));
+
+  // knock openings out of the wall
+  [S.door,S.win].forEach(o=>{
+    const [a,b]=openingSeg(o);
+    const horiz = a[1]===b[1];
+    svg.appendChild(el("rect",{
+      x: horiz? a[0] : a[0]-WALL/2-.5,
+      y: horiz? a[1]-WALL/2-.5 : a[1],
+      width: horiz? o.width : WALL+1,
+      height: horiz? WALL+1 : o.width,
+      fill: cssv("--paper-2")
+    }));
+  });
+
+  svg.appendChild(windowNode());
+  svg.appendChild(doorNode());
+
+  if(sel) svg.appendChild(dimsNode(sel));
+  svg.appendChild(roomDimsNode());
+
+  document.getElementById("roomMeta").textContent =
+    `${w}″ × ${h}″  ·  ${r1(w/12)}′ × ${r1(h/12)}′  ·  ${Math.round(w*h/144)} sq ft`;
+}
+
+function itemNode(it){
+  const g=el("g",{
+    transform:`rotate(${it.rot||0} ${it.x+it.w/2} ${it.y+it.h/2}) translate(${it.x} ${it.y})`,
+    style:"cursor:grab"
+  });
+  g.dataset.id=it.id;
+  const isSel = sel===it.id;
+  const fill=cssv(it.color)||cssv("--olive");
+  const common={fill,"fill-opacity":it.type==="rug"?.3:.72,
+    stroke:isSel?cssv("--sel"):cssv("--ink"),"stroke-width":isSel?2.6:1.2,
+    "stroke-dasharray":it.type==="rug"?"7 5":""};
+
+  if(it.type==="sofa"){
+    const d=Math.min(it.depth,it.h), c=Math.min(it.chaise,it.w);
+    const p = it.flip
+      ? `M0 0 H${it.w} V${d} H${c} V${it.h} H0 Z`
+      : `M0 0 H${it.w} V${it.h} H${it.w-c} V${d} H0 Z`;
+    g.appendChild(el("path",Object.assign({d:p,"stroke-linejoin":"round"},common)));
+    // back cushion line
+    g.appendChild(el("line",{x1:2,y1:7,x2:it.w-2,y2:7,stroke:cssv("--ink"),
+      "stroke-width":.9,opacity:.45}));
+  } else {
+    g.appendChild(el("rect",Object.assign({x:0,y:0,width:it.w,height:it.h,rx:it.type==="rug"?1:2},common)));
+    if(it.name==="Desk"){
+      g.appendChild(el("line",{x1:0,y1:it.h-9,x2:it.w,y2:it.h-9,stroke:cssv("--ink"),"stroke-width":.9,opacity:.4}));
+    }
+  }
+
+  const label=el("text",{x:it.w/2,y:it.h/2,"text-anchor":"middle","dominant-baseline":"central",
+    "font-size":Math.max(6.5,Math.min(9,it.w/9)),fill:cssv("--ink"),
+    "font-family":'ui-monospace,Menlo,monospace',"pointer-events":"none"});
+  label.textContent=`${it.w}×${it.h}`;
+  g.appendChild(label);
+  return g;
+}
+
+function doorNode(){
+  const g=el("g"), [a,b]=openingSeg(S.door), n=inwardNormal(S.door.wall);
+  const H = S.door.hinge? b : a, J = S.door.hinge? a : b;
+  const T = [H[0]+n[0]*S.door.width, H[1]+n[1]*S.door.width];
+  const cross=(T[0]-H[0])*(J[1]-H[1])-(T[1]-H[1])*(J[0]-H[0]);
+  g.appendChild(el("path",{
+    d:`M ${H[0]} ${H[1]} L ${T[0]} ${T[1]} A ${S.door.width} ${S.door.width} 0 0 ${cross>0?1:0} ${J[0]} ${J[1]}`,
+    fill:"none",stroke:cssv("--ink-soft"),"stroke-width":1.3,"stroke-dasharray":"5 4"}));
+  g.appendChild(el("line",{x1:H[0],y1:H[1],x2:T[0],y2:T[1],stroke:cssv("--wall"),"stroke-width":2.4}));
+  const mid=[(a[0]+b[0])/2+n[0]*11,(a[1]+b[1])/2+n[1]*11];
+  const t=el("text",{x:mid[0],y:mid[1],"text-anchor":"middle","dominant-baseline":"central",
+    "font-size":7,fill:cssv("--ink-soft"),"font-family":'ui-monospace,Menlo,monospace'});
+  t.textContent=`door ${S.door.width}″`;
+  g.appendChild(t);
+  return g;
+}
+
+function windowNode(){
+  const g=el("g"), [a,b]=openingSeg(S.win), n=inwardNormal(S.win.wall);
+  for(const s of [-1.6,1.6]){
+    g.appendChild(el("line",{x1:a[0]+n[0]*s,y1:a[1]+n[1]*s,x2:b[0]+n[0]*s,y2:b[1]+n[1]*s,
+      stroke:cssv("--glass"),"stroke-width":1.5}));
+  }
+  g.appendChild(el("line",{x1:a[0],y1:a[1],x2:b[0],y2:b[1],stroke:cssv("--glass"),"stroke-width":.8,opacity:.6}));
+  const mid=[(a[0]+b[0])/2+n[0]*11,(a[1]+b[1])/2+n[1]*11];
+  const t=el("text",{x:mid[0],y:mid[1],"text-anchor":"middle","dominant-baseline":"central",
+    "font-size":7,fill:cssv("--glass"),"font-family":'ui-monospace,Menlo,monospace'});
+  t.textContent=`window ${S.win.width}″`;
+  g.appendChild(t);
+  return g;
+}
+
+/* dimension tick line */
+function tick(x1,y1,x2,y2,txt,color){
+  const g=el("g",{stroke:color,"stroke-width":1,fill:"none"});
+  g.appendChild(el("line",{x1,y1,x2,y2}));
+  const dx=x2-x1, dy=y2-y1, L=Math.hypot(dx,dy)||1, nx=-dy/L*2.6, ny=dx/L*2.6;
+  g.appendChild(el("line",{x1:x1-nx,y1:y1-ny,x2:x1+nx,y2:y1+ny}));
+  g.appendChild(el("line",{x1:x2-nx,y1:y2-ny,x2:x2+nx,y2:y2+ny}));
+  const t=el("text",{x:(x1+x2)/2+nx*2.4,y:(y1+y2)/2+ny*2.4,"text-anchor":"middle",
+    "dominant-baseline":"central","font-size":7,fill:color,stroke:"none",
+    "font-family":'ui-monospace,Menlo,monospace'});
+  t.textContent=txt;
+  g.appendChild(t);
+  return g;
+}
+
+function dimsNode(id){
+  const it=S.items.find(i=>i.id===id); if(!it) return el("g");
+  const b=aabb(it), {w,h}=S.room, c=cssv("--sel"), g=el("g");
+  const my=(b.y0+b.y1)/2, mx=(b.x0+b.x1)/2;
+  if(b.x0>1)   g.appendChild(tick(0,my,b.x0,my,`${r1(b.x0)}″`,c));
+  if(w-b.x1>1) g.appendChild(tick(b.x1,my,w,my,`${r1(w-b.x1)}″`,c));
+  if(b.y0>1)   g.appendChild(tick(mx,0,mx,b.y0,`${r1(b.y0)}″`,c));
+  if(h-b.y1>1) g.appendChild(tick(mx,b.y1,mx,h,`${r1(h-b.y1)}″`,c));
+  return g;
+}
+
+function roomDimsNode(){
+  const {w,h}=S.room, c=cssv("--ink-soft"), g=el("g");
+  g.appendChild(tick(0,-15,w,-15,`${w}″`,c));
+  g.appendChild(tick(-15,0,-15,h,`${h}″`,c));
+  return g;
+}
+
+/* ============ pointer interaction ============ */
+function toRoom(evt){
+  const pt=svg.createSVGPoint(); pt.x=evt.clientX; pt.y=evt.clientY;
+  return pt.matrixTransform(svg.getScreenCTM().inverse());
+}
+function snap(it){
+  const b=aabb(it), {w,h}=S.room, T=3.5;
+  if(Math.abs(b.x0)<T) it.x-=b.x0;
+  else if(Math.abs(b.x1-w)<T) it.x-=(b.x1-w);
+  if(Math.abs(b.y0)<T) it.y-=b.y0;
+  else if(Math.abs(b.y1-h)<T) it.y-=(b.y1-h);
+}
+
+svg.addEventListener("pointerdown",e=>{
+  const g=e.target.closest("g[data-id]");
+  if(!g){ sel=null; render(); renderPanel(); return; }
+  const it=S.items.find(i=>i.id===+g.dataset.id);
+  sel=it.id;
+  const p=toRoom(e);
+  drag={it,ox:p.x-it.x,oy:p.y-it.y};
+  svg.setPointerCapture(e.pointerId);
+  render(); renderPanel();
+});
+svg.addEventListener("pointermove",e=>{
+  if(!drag) return;
+  const p=toRoom(e);
+  drag.it.x=Math.round(p.x-drag.ox);
+  drag.it.y=Math.round(p.y-drag.oy);
+  snap(drag.it);
+  render(); syncGaps();
+});
+svg.addEventListener("pointerup",e=>{
+  if(drag){ drag=null; renderPanel(); }
+  try{svg.releasePointerCapture(e.pointerId);}catch(_){}
+});
+svg.addEventListener("pointercancel",()=>{drag=null;});
+
+document.addEventListener("keydown",e=>{
+  if(!sel) return;
+  if(/^(INPUT|SELECT|TEXTAREA)$/.test(document.activeElement.tagName)) return;
+  const it=S.items.find(i=>i.id===sel); if(!it) return;
+  const step=e.shiftKey?6:1; let used=true;
+  switch(e.key){
+    case "ArrowLeft": it.x-=step; break;
+    case "ArrowRight": it.x+=step; break;
+    case "ArrowUp": it.y-=step; break;
+    case "ArrowDown": it.y+=step; break;
+    case "r": case "R": it.rot=((it.rot||0)+(e.shiftKey?-90:90)+360)%360; break;
+    case "Delete": case "Backspace": S.items=S.items.filter(i=>i.id!==sel); sel=null; break;
+    default: used=false;
+  }
+  if(used){ e.preventDefault(); if(sel) snap(it); render(); renderPanel(); }
+});
+
+/* ============ panel ============ */
+const $=id=>document.getElementById(id);
+
+function renderPanel(){
+  const it=S.items.find(i=>i.id===sel);
+  const body=$("selBody");
+  if(!it){
+    body.innerHTML='<p class="empty">Nothing selected. Tap a piece of furniture on the plan to move or resize it.</p>';
+  }else{
+    body.innerHTML=`
+      <div class="row"><label style="flex:1;color:var(--ink);font-weight:500">${it.name}</label></div>
+      <div class="row"><label for="iw">Width</label><input class="num" type="number" id="iw" min="4" step="1" value="${it.w}"></div>
+      <div class="row"><label for="ih">Depth</label><input class="num" type="number" id="ih" min="4" step="1" value="${it.h}"></div>
+      ${it.type==="sofa"?`
+      <div class="row"><label for="isd">Sofa depth</label><input class="num" type="number" id="isd" min="10" step="1" value="${it.depth}"></div>
+      <div class="row"><label for="isc">Chaise width</label><input class="num" type="number" id="isc" min="10" step="1" value="${it.chaise}"></div>`:""}
+      <div class="row"><label for="ir">Rotation ${it.rot||0}°</label></div>
+      <div class="row"><input type="range" id="ir" min="0" max="359" step="1" value="${it.rot||0}"></div>
+      <div class="btnrow">
+        <button id="rotL">↺ 90°</button>
+        <button id="rotR">↻ 90°</button>
+        ${it.type==="sofa"?'<button id="flip">Flip chaise</button>':""}
+        <button id="dup">Duplicate</button>
+        <button class="danger" id="del">Remove</button>
+      </div>
+      <div class="swatches">${PALETTE.map(c=>`<button class="sw" data-c="${c}" aria-pressed="${it.color===c}" style="background:${cssv(c)}" title="Color"></button>`).join("")}</div>
+      <div class="gaps" id="gaps"></div>`;
+
+    const upd=(k,v)=>{it[k]=Math.max(4,+v||4); if(it.type==="sofa"){it.depth=Math.min(it.depth,it.h);it.chaise=Math.min(it.chaise,it.w);} render(); renderPanel();};
+    $("iw").oninput=e=>upd("w",e.target.value);
+    $("ih").oninput=e=>upd("h",e.target.value);
+    if(it.type==="sofa"){
+      $("isd").oninput=e=>{it.depth=Math.min(+e.target.value||10,it.h);render();};
+      $("isc").oninput=e=>{it.chaise=Math.min(+e.target.value||10,it.w);render();};
+      $("flip").onclick=()=>{it.flip=!it.flip;render();};
+    }
+    $("ir").oninput=e=>{it.rot=+e.target.value;render();syncGaps();
+      e.target.closest(".row").previousElementSibling.querySelector("label").textContent=`Rotation ${it.rot}°`;};
+    $("rotL").onclick=()=>{it.rot=((it.rot||0)-90+360)%360;snap(it);render();renderPanel();};
+    $("rotR").onclick=()=>{it.rot=((it.rot||0)+90)%360;snap(it);render();renderPanel();};
+    $("dup").onclick=()=>{const n=JSON.parse(JSON.stringify(it));n.id=S.seq++;n.x+=8;n.y+=8;S.items.push(n);sel=n.id;render();renderPanel();};
+    $("del").onclick=()=>{S.items=S.items.filter(i=>i.id!==sel);sel=null;render();renderPanel();};
+    body.querySelectorAll(".sw").forEach(b=>b.onclick=()=>{it.color=b.dataset.c;render();renderPanel();});
+    syncGaps();
+  }
+  renderList();
+}
+
+function syncGaps(){
+  const box=$("gaps"); if(!box) return;
+  const it=S.items.find(i=>i.id===sel); if(!it) return;
+  const b=aabb(it), {w,h}=S.room;
+  box.innerHTML=[["To top",b.y0],["To bottom",h-b.y1],["To left",b.x0],["To right",w-b.x1]]
+    .map(([k,v])=>`<div><span>${k}</span><b class="num">${r1(v)}″</b></div>`).join("");
+}
+
+function renderList(){
+  const box=$("itemList");
+  if(!S.items.length){ box.innerHTML='<p class="empty">The room is empty.</p>'; return; }
+  box.innerHTML=S.items.map(i=>
+    `<button data-id="${i.id}" aria-pressed="${i.id===sel}"><span>${i.name}</span><span class="d">${i.w}×${i.h}${i.rot?" · "+i.rot+"°":""}</span></button>`).join("");
+  box.querySelectorAll("button").forEach(b=>b.onclick=()=>{sel=+b.dataset.id;render();renderPanel();});
+}
+
+/* palette */
+$("palette").innerHTML=CATALOG.map((c,i)=>
+  `<button data-i="${i}"><span>${c.name}</span><span class="sz">${c.w}×${c.h}″</span></button>`).join("");
+$("palette").querySelectorAll("button").forEach(b=>b.onclick=()=>{
+  const c=CATALOG[+b.dataset.i];
+  const it=Object.assign({},c,{id:S.seq++,rot:0,
+    x:Math.max(2,Math.round((S.room.w-c.w)/2)),
+    y:Math.max(2,Math.round((S.room.h-c.h)/2))});
+  S.items.push(it); sel=it.id; render(); renderPanel();
+});
+$("addCustom").onclick=()=>{
+  const w=parseFloat(prompt("Width in inches?","30")), h=parseFloat(prompt("Depth in inches?","20"));
+  if(!w||!h) return;
+  const name=prompt("Name it?","New piece")||"New piece";
+  const it={id:S.seq++,name,type:"rect",w:Math.abs(w),h:Math.abs(h),x:10,y:10,rot:0,color:"--slate"};
+  S.items.push(it); sel=it.id; render(); renderPanel();
+};
+
+/* room shell controls */
+function bindShell(){
+  const set=(id,val,fn)=>{const e=$(id);e.value=val;e.oninput=()=>{fn(e.value);clampOpenings();render();syncGaps();};};
+  set("rw",S.room.w,v=>S.room.w=Math.max(24,+v||24));
+  set("rh",S.room.h,v=>S.room.h=Math.max(24,+v||24));
+  set("dOff",S.door.off,v=>S.door.off=Math.max(0,+v||0));
+  set("dW",S.door.width,v=>S.door.width=Math.max(12,+v||12));
+  set("wOff",S.win.off,v=>S.win.off=Math.max(0,+v||0));
+  set("wW",S.win.width,v=>S.win.width=Math.max(6,+v||6));
+  $("dWall").value=S.door.wall; $("dWall").onchange=e=>{S.door.wall=e.target.value;clampOpenings();render();};
+  $("wWall").value=S.win.wall;  $("wWall").onchange=e=>{S.win.wall=e.target.value;clampOpenings();render();};
+  $("dFlip").onclick=()=>{S.door.hinge=S.door.hinge?0:1;render();};
+}
+function clampOpenings(){
+  [S.door,S.win].forEach(o=>{
+    const span=(o.wall==="N"||o.wall==="S")?S.room.w:S.room.h;
+    o.width=Math.min(o.width,span);
+    o.off=Math.min(Math.max(0,o.off),span-o.width);
+  });
+  ["dOff","dW","wOff","wW"].forEach((id,i)=>{
+    const v=[S.door.off,S.door.width,S.win.off,S.win.width][i];
+    if($(id)!==document.activeElement) $(id).value=v;
+  });
+}
+
+/* save / load */
+const KEY="roomplan:v1";
+function msg(t){$("savedmsg").textContent=t;setTimeout(()=>{if($("savedmsg").textContent===t)$("savedmsg").textContent="";},2600);}
+$("save").onclick=async()=>{
+  try{ await window.storage.set(KEY,JSON.stringify(S)); msg("Layout saved."); }
+  catch(e){ msg("Couldn't save here — use Print to keep a copy."); }
+};
+$("load").onclick=async()=>{
+  try{
+    const r=await window.storage.get(KEY);
+    if(!r||!r.value) throw 0;
+    S=JSON.parse(r.value); sel=null; bindShell(); render(); renderPanel(); msg("Saved layout loaded.");
+  }catch(e){ msg("No saved layout found."); }
+};
+$("print").onclick=()=>window.print();
+$("reset").onclick=()=>{S=defaults();sel=null;bindShell();render();renderPanel();msg("Back to the starting layout.");};
+
+/* go */
+bindShell(); render(); renderPanel();
+window.addEventListener("resize",render);
+})();
+</script>
+</body>
+</html>
